@@ -14,6 +14,8 @@ func UserRouter(router *gin.Engine)  {
         userGroup.POST("/login", controllers.LoginAUser())
         userGroup.POST("/uploadFile", controllers.UploadImage())
         userGroup.GET("/:userId", controllers.GetAUser())
+        userGroup.GET("/images", controllers.GetAllImages())
+        userGroup.GET("/image/", controllers.RetrieveImage())
         userGroup.PUT("/:userId", controllers.EditAUser())
         userGroup.DELETE("/:userId", controllers.DeleteAUser())
     }

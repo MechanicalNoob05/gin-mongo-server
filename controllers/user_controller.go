@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -55,6 +56,8 @@ func CreateUser() gin.HandlerFunc {
 			Name:     user.Name,
 			Location: user.Location,
 			Title:    user.Title,
+			CreatedAt:time.Now(), 
+			UpdatedAt:time.Now(), 
 		}
 
 		result, err := userCollection.InsertOne(ctx, newUser)
@@ -138,7 +141,7 @@ func EditAUser() gin.HandlerFunc {
 			return
 		}
 
-		update := bson.M{"name": user.Name, "location": user.Location, "username": user.UserName, "password": user.Password, "title": user.Title}
+		update := bson.M{"name": user.Name, "location": user.Location, "username": user.UserName, "password": user.Password, "title": user.Title, "updatedAt":time.Now()} 
 		result, err := userCollection.UpdateOne(ctx, bson.M{"_id": objId}, bson.M{"$set": update})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
@@ -272,5 +275,54 @@ func UploadImage() gin.HandlerFunc {
 		c.JSON(http.StatusOK,
 			responses.UserResponse{Status: http.StatusOK, Message: "Testing for upload ", Data: map[string]interface{}{"Image-Upload": metadata}},
 		)
+	}
+}
+func GetAllImages() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Specify the directory path
+		dirPath := "./images"
+
+		// Read the directory
+		files, err := os.ReadDir(dirPath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+			return
+		}
+
+		// Extract filenames from the file info
+		var imageNames []string
+		for _, file := range files {
+			imageNames = append(imageNames, file.Name())
+		}
+
+		// Return the list of image names
+		c.JSON(http.StatusOK, gin.H{"imageNames": imageNames})
+	}
+}
+
+func RetrieveImage() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Parse the JSON request body
+		var requestBody map[string]string
+		if err := c.BindJSON(&requestBody); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON format"})
+			return
+		}
+
+		// Get the filename from the request body
+		filename, exists := requestBody["filename"]
+		if !exists || filename == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Filename is required"})
+			return
+		}
+
+		// Specify the directory path
+		dirPath := "./images"
+
+		// Construct the file path
+		filePath := filepath.Join(dirPath, filename)
+
+		// Serve the file
+		c.File(filePath)
 	}
 }
