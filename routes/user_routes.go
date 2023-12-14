@@ -22,6 +22,8 @@ func UserRouter(router *gin.Engine) {
 	{
 		sudoUserGroup.GET("/images", controllers.GetAllImages())
 		sudoUserGroup.POST("/uploadFile", controllers.UploadImage())
+		sudoUserGroup.POST("/addTodo",controllers.AddTodo())
+		sudoUserGroup.GET("/getTodo",controllers.GetAllTodosForUser())
 		sudoUserGroup.GET("/image/", controllers.RetrieveImage())
 		sudoUserGroup.PUT("", controllers.EditAUser())
 		sudoUserGroup.DELETE("/:userId", controllers.DeleteAUser())
