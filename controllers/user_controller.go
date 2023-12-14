@@ -16,11 +16,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 var userCollection *mongo.Collection = configs.GetCollection(configs.DB, "users")
@@ -456,5 +456,67 @@ func GetAllTodosForUser() gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"todos": todos}})
+	}
+}
+
+func UploadToFirebase() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var Bucket = configs.FireBaseBucket()
+		var firebaseApp,err = configs.SetupFirebase()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
+		}
+
+		client, err := firebaseApp.Storage(context.Background())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create Firebase storage client",
+			})
+			return
+		}
+
+		bucketHandle, err := client.Bucket(Bucket)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to get Firebase storage bucket handle",
+			})
+			return
+		}
+
+		file, err := c.FormFile("file")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Failed to get file from request",
+			})
+			return
+		}
+
+		src, err := file.Open()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to open file",
+			})
+			return
+		}
+		defer src.Close()
+
+		objectHandle := bucketHandle.Object(file.Filename)
+
+		writer := objectHandle.NewWriter(context.Background())
+		id := uuid.New()
+		writer.ObjectAttrs.Metadata = map[string]string{"firebaseStorageDownloadTokens": id.String()}
+		defer writer.Close()
+
+		if _, err := io.Copy(writer, src); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to upload file to Firebase storage",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "File uploaded successfully to Firebase storage",
+		})
 	}
 }

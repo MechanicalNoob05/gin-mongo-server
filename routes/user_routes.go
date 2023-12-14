@@ -16,6 +16,7 @@ func UserRouter(router *gin.Engine) {
 		userGroup.POST("/login", controllers.LoginAUser())
 		userGroup.GET("/:userId", controllers.GetAUser())
 		userGroup.GET("/users", controllers.GetAllUsers())
+		userGroup.POST("/fire",controllers.UploadToFirebase())
 	}
 	fmt.Println("\n-> Setting Auth User Routes")
 	sudoUserGroup := router.Group("/user").Use(middleware.JWTMiddleware())
@@ -27,6 +28,7 @@ func UserRouter(router *gin.Engine) {
 		sudoUserGroup.GET("/image/", controllers.RetrieveImage())
 		sudoUserGroup.PUT("", controllers.EditAUser())
 		sudoUserGroup.DELETE("/:userId", controllers.DeleteAUser())
+		sudoUserGroup.POST("/fire", controllers.UploadToFirebase())
 	}
 
 }

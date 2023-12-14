@@ -39,3 +39,10 @@ func EnvJWTConfig() JWTConfig {
 		SecretKey: os.Getenv("JWT_SECRET_KEY"),
 	}
 }
+func FireBaseBucket() string{
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error Retiveing Bucket")
+	}
+	return os.Getenv("BUCKET_LINK")
+}
