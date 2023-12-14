@@ -2,10 +2,13 @@ package configs
 
 import (
 	"context"
+	"fmt"
 	"log"
 
+	firebase "firebase.google.com/go"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"google.golang.org/api/option"
 )
 
 func ConnectDB() *mongo.Client {
@@ -31,6 +34,17 @@ func ConnectDB() *mongo.Client {
 	log.Println("\n->Connected to MongoDB!")
 
 	return client
+}
+
+var firebaseApp *firebase.App
+
+func SetupFirebase() (*firebase.App, error) {
+	opt := option.WithCredentialsFile("firebase.json")
+	app, err := firebase.NewApp(context.Background(), nil, opt)
+	if err != nil {
+		return nil, fmt.Errorf("error initializing Firebase app: %v", err)
+	}
+	return app, nil
 }
 
 // Client instance
