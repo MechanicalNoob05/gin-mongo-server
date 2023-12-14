@@ -23,3 +23,19 @@ func EnvMongoConfig() MongoDBConfig {
 		Port: os.Getenv("PORT"),
 	}
 }
+
+type JWTConfig struct {
+	SecretKey string
+}
+
+// EnvJWTConfig reads JWT configuration from environment variables
+func EnvJWTConfig() JWTConfig {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	return JWTConfig{
+		SecretKey: os.Getenv("JWT_SECRET_KEY"),
+	}
+}

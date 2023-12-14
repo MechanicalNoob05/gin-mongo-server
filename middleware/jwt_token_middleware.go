@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"gin-mongo-server/configs"
 	"net/http"
 	"strings"
 	"time"
@@ -9,10 +10,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var jwtSecret = []byte("your-secret-key")
-
 func GenerateToken(userID string) (string, error) {
 	// Create a new JWT token with the user ID as the subject
+	jwtConfig := configs.EnvJWTConfig()
+	var jwtSecret = []byte(jwtConfig.SecretKey)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userID,
 		"exp": time.Now().Add(time.Hour * 24).Unix(), // Token expiration time (e.g., 24 hours)
@@ -29,6 +30,8 @@ func GenerateToken(userID string) (string, error) {
 func JWTMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract the token from the Authorization header
+		jwtConfig := configs.EnvJWTConfig()
+		var jwtSecret = []byte(jwtConfig.SecretKey)
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
@@ -45,7 +48,7 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// Parse and validate the token
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte("your-secret-key"), nil
+			return jwtSecret, nil
 		})
 
 		if err != nil {
