@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
+
 )
 
 func IsJPG(fileHeader *multipart.FileHeader) bool {
@@ -38,3 +39,5 @@ func HashPassword(password string) (string, error) {
 func VerifyPassword(enteredPassword, hashedPassword string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(enteredPassword))
 }
+
+

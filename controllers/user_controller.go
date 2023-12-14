@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"gin-mongo-server/configs"
+	"gin-mongo-server/middleware"
 	"gin-mongo-server/models"
 	"gin-mongo-server/responses"
 	"gin-mongo-server/utils"
@@ -23,6 +24,7 @@ import (
 
 var userCollection *mongo.Collection = configs.GetCollection(configs.DB, "users")
 var validate = validator.New()
+// Define a secret key for signing the JWT token
 
 func CreateUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -105,7 +107,7 @@ func LoginAUser() gin.HandlerFunc {
 		var existingUser models.User
 		err := userCollection.FindOne(ctx, filter).Decode(&existingUser)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "Invalid credentials"}})
+			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "Invalid credentials User"}})
 			return
 		}
 
@@ -113,45 +115,75 @@ func LoginAUser() gin.HandlerFunc {
 		// err = bcrypt.CompareHashAndPassword([]byte(existingUser.Password), []byte(loginCredentials.Password))
 		err = util.VerifyPassword(loginCredentials.Password, existingUser.Password)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "Invalid credentials"}})
+			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "Invalid credentials Pass"}})
 			return
 		}
 
-		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "Login sucess"}})
+		// Generate a JWT token upon successful login
+		token, err := middleware.GenerateToken(existingUser.ID.Hex())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "Internal Server Error"}})
+			return
+		}
+
+		// Return the JWT token in the response
+		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"token": token}})
 	}
 
 }
 func EditAUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		userId := c.Param("userId")
-		var user models.User
 		defer cancel()
-		objId, _ := primitive.ObjectIDFromHex(userId)
 
-		//validate the request body
+		// Retrieve the user ID from the JWT token obtained through middleware
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "User not authenticated"}})
+			return
+		}
+
+		// Convert user ID to ObjectID
+		objID, ok := userID.(primitive.ObjectID)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "Internal Server Error"}})
+			return
+		}
+
+		// Validate the request body
+		var user models.User
 		if err := c.BindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, responses.UserResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
 			return
 		}
 
-		//use the validator library to validate required fields
+		// Use the validator library to validate required fields
 		if validationErr := validate.Struct(&user); validationErr != nil {
 			c.JSON(http.StatusBadRequest, responses.UserResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": validationErr.Error()}})
 			return
 		}
 
-		update := bson.M{"name": user.Name, "location": user.Location, "username": user.UserName, "password": user.Password, "title": user.Title, "updatedAt":time.Now()} 
-		result, err := userCollection.UpdateOne(ctx, bson.M{"_id": objId}, bson.M{"$set": update})
+		// Create update data
+		update := bson.M{
+			"name":      user.Name,
+			"location":  user.Location,
+			"username":  user.UserName,
+			"password":  user.Password,
+			"title":     user.Title,
+			"updatedAt": time.Now(),
+		}
+
+		// Update the user in the database
+		result, err := userCollection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": update})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
 			return
 		}
 
-		//get updated user details
+		// Get the updated user details
 		var updatedUser models.User
 		if result.MatchedCount == 1 {
-			err := userCollection.FindOne(ctx, bson.M{"_id": objId}).Decode(&updatedUser)
+			err := userCollection.FindOne(ctx, bson.M{"_id": objID}).Decode(&updatedUser)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
 				return

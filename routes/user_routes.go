@@ -1,24 +1,30 @@
 package routes
 
 import (
-    "gin-mongo-server/controllers" //add this
-    "github.com/gin-gonic/gin"
-    "fmt"
+	"fmt"
+	"gin-mongo-server/controllers"
+	"gin-mongo-server/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
-func UserRouter(router *gin.Engine)  {
-    fmt.Println("\n-> Setting User Routes")
-    userGroup := router.Group("/user")
-    {
-        userGroup.POST("", controllers.CreateUser())
-        userGroup.POST("/login", controllers.LoginAUser())
-        userGroup.POST("/uploadFile", controllers.UploadImage())
-        userGroup.GET("/:userId", controllers.GetAUser())
-        userGroup.GET("/images", controllers.GetAllImages())
-        userGroup.GET("/image/", controllers.RetrieveImage())
-        userGroup.PUT("/:userId", controllers.EditAUser())
-        userGroup.DELETE("/:userId", controllers.DeleteAUser())
-    }
+func UserRouter(router *gin.Engine) {
+	fmt.Println("\n-> Setting User Routes")
+	userGroup := router.Group("")
+	{
+		userGroup.POST("/signup", controllers.CreateUser())
+		userGroup.POST("/login", controllers.LoginAUser())
+		userGroup.GET("/:userId", controllers.GetAUser())
+		userGroup.GET("/users", controllers.GetAllUsers())
+	}
+	fmt.Println("\n-> Setting Auth User Routes")
+	sudoUserGroup := router.Group("/user").Use(middleware.JWTMiddleware())
+	{
+		sudoUserGroup.GET("/images", controllers.GetAllImages())
+		sudoUserGroup.POST("/uploadFile", controllers.UploadImage())
+		sudoUserGroup.GET("/image/", controllers.RetrieveImage())
+		sudoUserGroup.PUT("", controllers.EditAUser())
+		sudoUserGroup.DELETE("/:userId", controllers.DeleteAUser())
+	}
 
-    router.GET("/users", controllers.GetAllUsers())
 }
