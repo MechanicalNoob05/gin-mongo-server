@@ -18,12 +18,15 @@ import (
 	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
 
 var userCollection *mongo.Collection = configs.GetCollection(configs.DB, "users")
+var todoCollection *mongo.Collection = configs.GetCollection(configs.DB, "todos")
 var validate = validator.New()
+
 // Define a secret key for signing the JWT token
 
 func CreateUser() gin.HandlerFunc {
@@ -53,13 +56,13 @@ func CreateUser() gin.HandlerFunc {
 
 		// Create a new user with the encrypted password
 		newUser := models.User{
-			UserName: user.UserName,
-			Password: hashedPassword,
-			Name:     user.Name,
-			Location: user.Location,
-			Title:    user.Title,
-			CreatedAt:time.Now(), 
-			UpdatedAt:time.Now(), 
+			UserName:  user.UserName,
+			Password:  hashedPassword,
+			Name:      user.Name,
+			Location:  user.Location,
+			Title:     user.Title,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
 
 		result, err := userCollection.InsertOne(ctx, newUser)
@@ -356,5 +359,102 @@ func RetrieveImage() gin.HandlerFunc {
 
 		// Serve the file
 		c.File(filePath)
+	}
+}
+func AddTodo() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get user ID from the request context (assuming it was set during authentication)
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+
+		// Parse the JSON request body
+		var todo models.Todo
+		if err := c.BindJSON(&todo); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON format"})
+			return
+		}
+
+		// Set user ID for the TODO item
+		objID, err := primitive.ObjectIDFromHex(userID.(string))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, responses.UserResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "Invalid user ID format"}})
+			return
+		}
+		todo.Owner = objID
+		todo.CreatedAt = time.Now()
+
+		// Add TODO to the database
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		result, err := todoCollection.InsertOne(ctx, todo)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+			return
+		}
+
+		// Construct response
+		response := responses.TodoResponse{
+			Status:  http.StatusCreated,
+			Message: "Todo added successfully",
+			Data: map[string]interface{}{
+				"todoID": result.InsertedID,
+			},
+		}
+
+		c.JSON(http.StatusCreated, response)
+	}
+}
+func GetAllTodosForUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Retrieve the user ID from the JWT token obtained through middleware
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "User not authenticated"}})
+			return
+		}
+
+		// Convert user ID to ObjectID
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "Internal Server Error"}})
+			return
+		}
+
+		objID, err := primitive.ObjectIDFromHex(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, responses.UserResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "Invalid user ID format"}})
+			return
+		}
+
+		// Query the database for todos associated with the user
+		findOptions := options.Find()
+		findOptions.SetSort(primitive.D{{Key: "createdAt", Value: -1}})
+
+		filter := bson.M{"owner": objID}
+		cursor, err := todoCollection.Find(ctx, filter, findOptions)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
+		}
+		defer cursor.Close(ctx)
+
+		var todos []models.Todo
+		for cursor.Next(ctx) {
+			var todo models.Todo
+			if err := cursor.Decode(&todo); err != nil {
+				c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+				return
+			}
+			todos = append(todos, todo)
+		}
+
+		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"todos": todos}})
 	}
 }
