@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-
 )
 
 func IsJPG(fileHeader *multipart.FileHeader) bool {
@@ -41,3 +41,9 @@ func VerifyPassword(enteredPassword, hashedPassword string) error {
 }
 
 
+func HandleUnknownRoute(c *gin.Context) {
+	c.JSON(http.StatusNotFound, gin.H{
+		"error":   "Not Found",
+		"message": "The requested resource does not exist",
+	})
+}

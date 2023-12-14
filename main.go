@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"gin-mongo-server/configs"
 	"gin-mongo-server/routes"
+	"gin-mongo-server/utils"
+	"time"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"time"
 )
 
 func main() {
@@ -23,6 +25,8 @@ func main() {
 	//run database
 	configs.ConnectDB()
 	mongoConfig := configs.EnvMongoConfig()
+	router.NoRoute(utils.HandleUnknownRoute)
+
 	routes.UserRouter(router)
 	routes.AdminRouter(router)
 
