@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"gin-mongo-server/controllers"
 	"gin-mongo-server/middleware"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,15 +15,15 @@ func UserRouter(router *gin.Engine) {
 		userGroup.POST("/login", controllers.LoginAUser())
 		userGroup.GET("/:userId", controllers.GetAUser())
 		userGroup.GET("/users", controllers.GetAllUsers())
-		userGroup.POST("/fire",controllers.UploadToFirebase())
+		userGroup.POST("/fire", controllers.UploadToFirebase())
 	}
 	fmt.Println("\n-> Setting Auth User Routes")
 	sudoUserGroup := router.Group("/user").Use(middleware.JWTMiddleware())
 	{
 		sudoUserGroup.GET("/images", controllers.GetAllImages())
 		sudoUserGroup.POST("/uploadFile", controllers.UploadImage())
-		sudoUserGroup.POST("/addTodo",controllers.AddTodo())
-		sudoUserGroup.GET("/getTodo",controllers.GetAllTodosForUser())
+		sudoUserGroup.POST("/addTodo", controllers.AddTodo())
+		sudoUserGroup.GET("/getTodo", controllers.GetAllTodosForUser())
 		sudoUserGroup.GET("/image/", controllers.RetrieveImage())
 		sudoUserGroup.PUT("", controllers.EditAUser())
 		sudoUserGroup.DELETE("/:userId", controllers.DeleteAUser())

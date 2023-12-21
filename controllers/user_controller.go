@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"gin-mongo-server/configs"
 	"gin-mongo-server/middleware"
 	"gin-mongo-server/models"
@@ -9,6 +10,7 @@ import (
 	"gin-mongo-server/utils"
 	util "gin-mongo-server/utils"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -76,6 +78,7 @@ func CreateUser() gin.HandlerFunc {
 }
 func GetAUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		log.Printf("New login")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		userId := c.Param("userId")
 		var user models.User
@@ -95,6 +98,7 @@ func GetAUser() gin.HandlerFunc {
 func LoginAUser() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
+		log.Printf("New login")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -461,14 +465,20 @@ func GetAllTodosForUser() gin.HandlerFunc {
 
 func UploadToFirebase() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		var Bucket = configs.FireBaseBucket()
-		var firebaseApp,err = configs.SetupFirebase()
+		var firebaseApp, err = configs.SetupFirebase()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			})
 			return
 		}
 
-		client, err := firebaseApp.Storage(context.Background())
+		client, err := firebaseApp.Storage(ctx)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to create Firebase storage client",
@@ -503,7 +513,7 @@ func UploadToFirebase() gin.HandlerFunc {
 
 		objectHandle := bucketHandle.Object(file.Filename)
 
-		writer := objectHandle.NewWriter(context.Background())
+		writer := objectHandle.NewWriter(ctx)
 		id := uuid.New()
 		writer.ObjectAttrs.Metadata = map[string]string{"firebaseStorageDownloadTokens": id.String()}
 		defer writer.Close()
@@ -515,8 +525,24 @@ func UploadToFirebase() gin.HandlerFunc {
 			return
 		}
 
+		// Get the download URL for the uploaded file
+		downloadURL, err := objectHandle.Attrs(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to get download URL",
+			})
+			return
+		}
+
+		newURL, err := util.ConvertGoogleStorageURL(downloadURL.MediaLink, id.String())
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"message": "File uploaded successfully to Firebase storage",
+			"url":     newURL,
 		})
 	}
 }
