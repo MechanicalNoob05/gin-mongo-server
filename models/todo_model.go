@@ -9,7 +9,10 @@ import (
 type Todo struct {
 	ID        primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
 	Owner     primitive.ObjectID `json:"owner" bson:"owner"`
-	Title     string             `json:"title" bson:"title" validate:"required"`
-	Content   string             `json:"content" bson:"content" validate:"required"`
+	Title     string             `json:"title" bson:"title" validate:"required, min=2, max=100"`
+	Content   string             `json:"content" bson:"content" validate:"required, min=2, max=100"`
+	Completed bool               `json:"completed" bson:"completed"`
+	Important bool               `json:"important" bson:"important"`
 	CreatedAt time.Time          `json:"createdAt,omitempty" bson:"createdAt"`
+	UpdatedAt time.Time          `json:"updatedAt" bson:"updatedAt"`
 }
