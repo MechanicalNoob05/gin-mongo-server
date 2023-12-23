@@ -12,8 +12,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -60,9 +58,9 @@ func CreateUser() gin.HandlerFunc {
 		newUser := models.User{
 			UserName:  user.UserName,
 			Password:  hashedPassword,
-			Name:      user.Name,
-			Location:  user.Location,
-			Title:     user.Title,
+			FirstName: user.FirstName,
+			LastName:  user.LastName,
+			Email:     user.Email,
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
@@ -76,15 +74,36 @@ func CreateUser() gin.HandlerFunc {
 		c.JSON(http.StatusCreated, responses.UserResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": result}})
 	}
 }
+
+type UserDetails struct {
+	FirstName string `json:"fname"`
+	LastName  string `json:"lname"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+}
+
 func GetAUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		log.Printf("New login")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		userId := c.Param("userId")
 		var user models.User
+
 		defer cancel()
 
-		objId, _ := primitive.ObjectIDFromHex(userId)
+		// Retrieve the user ID from the JWT token obtained through middleware
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "User not authenticated"}})
+			return
+		}
+
+		// Convert user ID to ObjectID
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "Internal Server Error"}})
+			return
+		}
+
+		objId, _ := primitive.ObjectIDFromHex(userIDStr)
 
 		err := userCollection.FindOne(ctx, bson.M{"_id": objId}).Decode(&user)
 		if err != nil {
@@ -92,7 +111,14 @@ func GetAUser() gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": user}})
+		// Create a new UserDetails struct with the required fields
+		userDetails := UserDetails{
+			FirstName: user.FirstName,
+			LastName:  user.LastName,
+			Username:  user.UserName,
+		}
+
+		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": userDetails}})
 	}
 }
 func LoginAUser() gin.HandlerFunc {
@@ -172,11 +198,10 @@ func EditAUser() gin.HandlerFunc {
 
 		// Create update data
 		update := bson.M{
-			"name":      user.Name,
-			"location":  user.Location,
+			"fname":     user.FirstName,
+			"lname":     user.LastName,
 			"username":  user.UserName,
-			"password":  user.Password,
-			"title":     user.Title,
+			"email":     user.Email,
 			"updatedAt": time.Now(),
 		}
 
@@ -258,113 +283,6 @@ func GetAllUsers() gin.HandlerFunc {
 
 }
 
-func UploadImage() gin.HandlerFunc {
-	return func(c *gin.Context) {
-
-		// Parse our multipart form, 10 << 20 specifies a maximum
-		// upload of 10 MB files.
-		err := c.Request.ParseMultipartForm(10 << 20)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
-			return
-		}
-
-		// FormFile returns the first file for the given key `myFile`
-		// it also returns the FileHeader so we can get the Filename,
-		// the Header, and the size of the file
-		file, handler, err := c.Request.FormFile("myFile")
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Bad Request"})
-			return
-		}
-		defer file.Close()
-
-		// Check if the uploaded file is a JPG image
-		if !util.IsJPG(handler) {
-			c.JSON(http.StatusNotAcceptable, gin.H{"error": "Invalid file format. Only JPG images are allowed."})
-			return
-		}
-
-		// Create a temporary file within our temp-images directory that follows
-		// a particular naming pattern
-		tempFile, err := os.CreateTemp("./images", "upload-*.jpg")
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
-			return
-		}
-		defer tempFile.Close()
-
-		// read all of the contents of our uploaded file into a
-		// byte array
-		fileBytes, err := io.ReadAll(file)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
-			return
-		}
-		// write this byte array to our temporary file
-		tempFile.Write(fileBytes)
-
-		// Construct metadata response
-		metadata := map[string]interface{}{
-			"Filename": handler.Filename,
-			"Size":     handler.Size,
-		}
-
-		// Return metadata as JSON in the response
-		c.JSON(http.StatusOK,
-			responses.UserResponse{Status: http.StatusOK, Message: "Testing for upload ", Data: map[string]interface{}{"Image-Upload": metadata}},
-		)
-	}
-}
-func GetAllImages() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Specify the directory path
-		dirPath := "./images"
-
-		// Read the directory
-		files, err := os.ReadDir(dirPath)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
-			return
-		}
-
-		// Extract filenames from the file info
-		var imageNames []string
-		for _, file := range files {
-			imageNames = append(imageNames, file.Name())
-		}
-
-		// Return the list of image names
-		c.JSON(http.StatusOK, gin.H{"imageNames": imageNames})
-	}
-}
-
-func RetrieveImage() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Parse the JSON request body
-		var requestBody map[string]string
-		if err := c.BindJSON(&requestBody); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON format"})
-			return
-		}
-
-		// Get the filename from the request body
-		filename, exists := requestBody["filename"]
-		if !exists || filename == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Filename is required"})
-			return
-		}
-
-		// Specify the directory path
-		dirPath := "./images"
-
-		// Construct the file path
-		filePath := filepath.Join(dirPath, filename)
-
-		// Serve the file
-		c.File(filePath)
-	}
-}
 func AddTodo() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get user ID from the request context (assuming it was set during authentication)
@@ -410,6 +328,85 @@ func AddTodo() gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusCreated, response)
+	}
+}
+func EditATodo() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Retrieve the user ID from the JWT token obtained through middleware
+		todoId := c.Param("todoId")
+
+		// Convert user ID to ObjectID
+		objId, _ := primitive.ObjectIDFromHex(todoId)
+
+		// Validate the request body
+		var todo models.Todo
+		if err := c.BindJSON(&todo); err != nil {
+			c.JSON(http.StatusBadRequest, responses.TodoResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
+		}
+
+		// Use the validator library to validate required fields
+		if validationErr := validate.Struct(&todo); validationErr != nil {
+			c.JSON(http.StatusBadRequest, responses.TodoResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": validationErr.Error()}})
+			return
+		}
+
+		// Create update data
+		update := bson.M{
+			"title":     todo.Title,
+			"content":   todo.Content,
+			"important": todo.Important,
+			"completed": todo.Completed,
+			"updatedAt": time.Now(),
+		}
+
+		// Update the todo in the database
+		result, err := todoCollection.UpdateOne(ctx, bson.M{"_id": objId}, bson.M{"$set": update})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, responses.TodoResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
+		}
+
+		// Get the updated todo details
+		var updatedTodo models.Todo
+		if result.MatchedCount == 1 {
+			err := todoCollection.FindOne(ctx, bson.M{"_id": objId}).Decode(&updatedTodo)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, responses.TodoResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+				return
+			}
+		}
+
+		c.JSON(http.StatusOK, responses.TodoResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": updatedTodo}})
+	}
+}
+func DeleteAUserTodo() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		userId := c.Param("todoId")
+		defer cancel()
+
+		objId, _ := primitive.ObjectIDFromHex(userId)
+
+		result, err := todoCollection.DeleteOne(ctx, bson.M{"_id": objId})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
+		}
+
+		if result.DeletedCount < 1 {
+			c.JSON(http.StatusNotFound,
+				responses.UserResponse{Status: http.StatusNotFound, Message: "error", Data: map[string]interface{}{"data": "Todo with specified ID not found!"}},
+			)
+			return
+		}
+
+		c.JSON(http.StatusOK,
+			responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "Todo successfully deleted!"}},
+		)
 	}
 }
 func GetAllTodosForUser() gin.HandlerFunc {
