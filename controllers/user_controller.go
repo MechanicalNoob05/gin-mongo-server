@@ -87,7 +87,7 @@ func GetAUser() gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		var user models.User
 
-		defer cancel()
+	defer cancel()
 
 		// Retrieve the user ID from the JWT token obtained through middleware
 		userID, exists := c.Get("userID")
@@ -228,10 +228,19 @@ func EditAUser() gin.HandlerFunc {
 func DeleteAUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		userId := c.Param("userId")
 		defer cancel()
+		userId, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "User not authenticated"}})
+			return
+		}
 
-		objId, _ := primitive.ObjectIDFromHex(userId)
+		objId, ok := userId.(primitive.ObjectID)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "Internal Server Error"}})
+			return
+		}
+		// objId, _ := primitive.ObjectIDFromHex(userId)
 
 		result, err := userCollection.DeleteOne(ctx, bson.M{"_id": objId})
 		if err != nil {
@@ -436,9 +445,10 @@ func GetAllTodosForUser() gin.HandlerFunc {
 
 		// Query the database for todos associated with the user
 		findOptions := options.Find()
-		findOptions.SetSort(primitive.D{{Key: "createdAt", Value: -1}})
+		findOptions.SetSort(primitive.D{{Key: "important", Value: -1},{Key: "createdAt", Value: -1}})
 
 		filter := bson.M{"owner": objID}
+
 		cursor, err := todoCollection.Find(ctx, filter, findOptions)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})

@@ -24,8 +24,8 @@ func UserRouter(router *gin.Engine) {
 		sudoUserGroup.GET("/getTodo", controllers.GetAllTodosForUser())
 		sudoUserGroup.DELETE("/deleteTodo/:todoId", controllers.DeleteAUserTodo())
 		sudoUserGroup.PUT("/editTodo/:todoId", controllers.EditATodo())
-		sudoUserGroup.PUT("/editUser", controllers.EditAUser())
-		sudoUserGroup.DELETE("/:userId", controllers.DeleteAUser())
+		sudoUserGroup.PUT("/editUserProfile", controllers.EditAUser())
+		sudoUserGroup.DELETE("/deleteAccount", controllers.DeleteAUser())
 		sudoUserGroup.POST("/fire", controllers.UploadToFirebase())
 	}
 
