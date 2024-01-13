@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"gin-mongo-server/configs"
 	"gin-mongo-server/middleware"
 	"gin-mongo-server/models"
@@ -87,7 +86,7 @@ func GetAUser() gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		var user models.User
 
-	defer cancel()
+		defer cancel()
 
 		// Retrieve the user ID from the JWT token obtained through middleware
 		userID, exists := c.Get("userID")
@@ -445,7 +444,7 @@ func GetAllTodosForUser() gin.HandlerFunc {
 
 		// Query the database for todos associated with the user
 		findOptions := options.Find()
-		findOptions.SetSort(primitive.D{{Key: "important", Value: -1},{Key: "createdAt", Value: -1}})
+		findOptions.SetSort(primitive.D{{Key: "important", Value: -1}, {Key: "createdAt", Value: -1}})
 
 		filter := bson.M{"owner": objID}
 
@@ -470,10 +469,30 @@ func GetAllTodosForUser() gin.HandlerFunc {
 	}
 }
 
-func UploadToFirebase() gin.HandlerFunc {
+func AddProfilePic() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, responses.UserResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "User not authenticated"}})
+			return
+		}
+
+		// Convert user ID to ObjectID
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "Internal Server Error"}})
+			return
+		}
+
+		objID, error := primitive.ObjectIDFromHex(userIDStr)
+		if error != nil {
+			c.JSON(http.StatusBadRequest, responses.UserResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "Invalid user ID format"}})
+			return
+		}
+
 		var Bucket = configs.FireBaseBucket()
 		var firebaseApp, err = configs.SetupFirebase()
 		if err != nil {
@@ -543,7 +562,20 @@ func UploadToFirebase() gin.HandlerFunc {
 
 		newURL, err := util.ConvertGoogleStorageURL(downloadURL.MediaLink, id.String())
 		if err != nil {
-			fmt.Println("Error:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err,
+			})
+			return
+		}
+
+		update := bson.M{"$set": bson.M{"profilepic": newURL}}
+		filter := bson.M{"_id": objID}
+
+		_, err = userCollection.UpdateOne(ctx, filter, update)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to update user profile picture URL in the database",
+			})
 			return
 		}
 
