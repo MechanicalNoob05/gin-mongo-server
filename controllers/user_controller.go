@@ -46,6 +46,28 @@ func CreateUser() gin.HandlerFunc {
 			return
 		}
 
+		// Check if the username already exists
+		existingUser, err := userCollection.FindOne(ctx, bson.M{"username": user.UserName}).Raw()
+		if existingUser != nil {
+			c.JSON(http.StatusConflict, responses.UserResponse{Status: http.StatusConflict, Message: "error", Data: map[string]interface{}{"data": "Username already exists"}})
+			return
+		}
+		if err != nil && err != mongo.ErrNoDocuments {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
+		}
+
+		// Check if the email already exists
+		existingUser, err = userCollection.FindOne(ctx, bson.M{"email": user.Email}).Raw()
+		if existingUser != nil {
+			c.JSON(http.StatusConflict, responses.UserResponse{Status: http.StatusConflict, Message: "error", Data: map[string]interface{}{"data": "Email already exists"}})
+			return
+		}
+		if err != nil && err != mongo.ErrNoDocuments {
+			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
+		}
+
 		// Hash the password
 		hashedPassword, err := utils.HashPassword(user.Password)
 		if err != nil {
@@ -64,6 +86,7 @@ func CreateUser() gin.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
+		// Insert the new user into the database
 		result, err := userCollection.InsertOne(ctx, newUser)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
@@ -339,6 +362,7 @@ func AddTodo() gin.HandlerFunc {
 		c.JSON(http.StatusCreated, response)
 	}
 }
+
 func EditATodo() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -443,11 +467,16 @@ func GetAllTodosForUser() gin.HandlerFunc {
 			return
 		}
 
-		// Query the database for todos associated with the user
+		// Query the database for todos associated with the user or where the user is a collaborator
 		findOptions := options.Find()
 		findOptions.SetSort(primitive.D{{Key: "important", Value: -1}, {Key: "createdAt", Value: -1}})
 
-		filter := bson.M{"owner": objID}
+		filter := bson.M{
+			"$or": []bson.M{
+				{"owner": objID},
+				{"collaborators": objID},
+			},
+		}
 
 		cursor, err := todoCollection.Find(ctx, filter, findOptions)
 		if err != nil {
