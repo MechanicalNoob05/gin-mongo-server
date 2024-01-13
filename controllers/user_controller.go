@@ -26,7 +26,6 @@ var userCollection *mongo.Collection = configs.GetCollection(configs.DB, "users"
 var todoCollection *mongo.Collection = configs.GetCollection(configs.DB, "todos")
 var validate = validator.New()
 
-// Define a secret key for signing the JWT token
 
 func CreateUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
