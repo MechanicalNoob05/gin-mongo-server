@@ -363,6 +363,103 @@ func AddTodo() gin.HandlerFunc {
 	}
 }
 
+func AddCollaboratorToTodo() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Get the user ID from the JWT token obtained through middleware
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+
+		// Convert user ID to ObjectID
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+			return
+		}
+
+		userObjID, err := primitive.ObjectIDFromHex(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
+			return
+		}
+
+		// Get the collaborator and todo IDs from the request body
+		var requestPayload struct {
+			TodoID         string `json:"todoID" binding:"required"`
+			CollaboratorID string `json:"collaboratorID" binding:"required"`
+		}
+
+		if err := c.BindJSON(&requestPayload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		// Convert todo ID to ObjectID
+		todoObjID, err := primitive.ObjectIDFromHex(requestPayload.TodoID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid todo ID format"})
+			return
+		}
+
+		// Check if the todo exists
+		var existingTodo models.Todo
+		err = todoCollection.FindOne(ctx, bson.M{"_id": todoObjID}).Decode(&existingTodo)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Todo not found"})
+			return
+		}
+
+		// Check if the current user is the owner of the todo
+		if existingTodo.Owner != userObjID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You do not have permission to add a collaborator to this todo"})
+			return
+		}
+
+		// Convert collaborator ID to ObjectID
+		collaboratorObjID, err := primitive.ObjectIDFromHex(requestPayload.CollaboratorID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid collaborator ID format"})
+			return
+		}
+
+		// Check if the collaborator is the owner of the todo
+		if existingTodo.Owner == collaboratorObjID {
+			c.JSON(http.StatusConflict, gin.H{"error": "Cannot add the owner of the todo as a collaborator"})
+			return
+		}
+
+		// Check if the collaborator ID corresponds to an actual user
+		var collaborator models.User
+		err = userCollection.FindOne(ctx, bson.M{"_id": collaboratorObjID}).Decode(&collaborator)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Collaborator not found"})
+			return
+		}
+
+		// Check if the collaborator is already in the collaborators array
+		for _, existingCollaborator := range existingTodo.Collaborators {
+			if existingCollaborator == collaboratorObjID {
+				c.JSON(http.StatusConflict, gin.H{"error": "Collaborator is already added to this todo"})
+				return
+			}
+		}
+
+		// Update the todo with the new collaborator
+		update := bson.M{"$push": bson.M{"collaborators": collaboratorObjID}}
+		_, err = todoCollection.UpdateOne(ctx, bson.M{"_id": todoObjID}, update)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add collaborator to todo"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Collaborator added to todo successfully"})
+	}
+}
 func EditATodo() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
