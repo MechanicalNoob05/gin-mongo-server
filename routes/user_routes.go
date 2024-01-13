@@ -26,7 +26,8 @@ func UserRouter(router *gin.Engine) {
 		sudoUserGroup.PUT("/editTodo/:todoId", controllers.EditATodo())
 		sudoUserGroup.PUT("/editUserProfile", controllers.EditAUser())
 		sudoUserGroup.DELETE("/deleteAccount", controllers.DeleteAUser())
-		sudoUserGroup.POST("/fire", controllers.AddProfilePic())
+		sudoUserGroup.POST("/addProfilePic", controllers.AddProfilePic())
+		sudoUserGroup.POST("/addcollaborator", controllers.AddCollaboratorToTodo())
 	}
 
 }
