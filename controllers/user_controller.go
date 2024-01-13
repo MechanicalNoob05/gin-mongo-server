@@ -75,10 +75,10 @@ func CreateUser() gin.HandlerFunc {
 }
 
 type UserDetails struct {
-	FirstName string `json:"fname"`
-	LastName  string `json:"lname"`
-	Username  string `json:"username"`
-	Email     string `json:"email"`
+	FirstName  string `json:"fname"`
+	LastName   string `json:"lname"`
+	Username   string `json:"username"`
+	ProfilePic string `json:"profilepic"`
 }
 
 func GetAUser() gin.HandlerFunc {
@@ -112,9 +112,10 @@ func GetAUser() gin.HandlerFunc {
 
 		// Create a new UserDetails struct with the required fields
 		userDetails := UserDetails{
-			FirstName: user.FirstName,
-			LastName:  user.LastName,
-			Username:  user.UserName,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+			Username:   user.UserName,
+			ProfilePic: user.ProfilePic,
 		}
 
 		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": userDetails}})
@@ -536,8 +537,8 @@ func AddProfilePic() gin.HandlerFunc {
 			return
 		}
 		defer src.Close()
-
-		objectHandle := bucketHandle.Object(file.Filename)
+		objectFileName := "profilePic/" + userIDStr
+		objectHandle := bucketHandle.Object(objectFileName)
 
 		writer := objectHandle.NewWriter(ctx)
 		id := uuid.New()
@@ -552,15 +553,9 @@ func AddProfilePic() gin.HandlerFunc {
 		}
 
 		// Get the download URL for the uploaded file
-		downloadURL, err := objectHandle.Attrs(ctx)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to get download URL",
-			})
-			return
-		}
+		downloadURL := objectHandle.ObjectName()
 
-		newURL, err := util.ConvertGoogleStorageURL(downloadURL.MediaLink, id.String())
+		newURL, err := util.ConvertGoogleStorageURL(Bucket, downloadURL, id.String())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err,

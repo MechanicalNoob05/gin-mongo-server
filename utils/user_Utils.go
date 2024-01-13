@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -37,11 +36,11 @@ func HashPassword(password string) (string, error) {
 	}
 	return string(hashedPassword), nil
 }
+
 // Function to verify the entered password against the hashed password
 func VerifyPassword(enteredPassword, hashedPassword string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(enteredPassword))
 }
-
 
 func HandleUnknownRoute(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{
@@ -50,20 +49,13 @@ func HandleUnknownRoute(c *gin.Context) {
 	})
 }
 
-func ConvertGoogleStorageURL(originalURL string, token string) (string, error) {
+func ConvertGoogleStorageURL(bucketname string, filename string, token string) (string, error) {
 	// Parse the original URL
-	parsedURL, err := url.Parse(originalURL)
-	if err != nil {
-		return "", err
-	}
-
-	// Extract the path components
-	pathComponents := strings.Split(parsedURL.Path, "/")
-
+	filename = strings.ReplaceAll(filename, "/", "%2F")
 	// Modify the URL components
 	newURL := fmt.Sprintf("https://firebasestorage.googleapis.com/v0/b/%s/o/%s?alt=media&token=%s",
-		pathComponents[5], // Extracting the bucket name
-		pathComponents[7], // Extracting the object path
+		bucketname, // Extracting the bucket name
+		filename,   // Extracting the object path
 		token,
 	)
 
