@@ -396,7 +396,6 @@ func AddCollaboratorToTodo() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 			return
 		}
-
 		// Convert todo ID to ObjectID
 		todoObjID, err := primitive.ObjectIDFromHex(requestPayload.TodoID)
 		if err != nil {
@@ -441,6 +440,13 @@ func AddCollaboratorToTodo() gin.HandlerFunc {
 
 		// Check if the collaborator is already in the collaborators array
 
+		// Check if the collaborator is already in the collaborators array
+		for _, existingCollaborator := range existingTodo.Collaborators {
+			if existingCollaborator.ID == collaboratorObjID {
+				c.JSON(http.StatusConflict, gin.H{"error": "Collaborator is already added to this todo"})
+				return
+			}
+		}
 		// Update the todo with the new collaborator
 		update := bson.M{"$push": bson.M{"collaborators": collaboratorObjID}}
 		_, err = todoCollection.UpdateOne(ctx, bson.M{"_id": todoObjID}, update)
@@ -567,9 +573,9 @@ func GetAllTodosForUser() gin.HandlerFunc {
 			},
 			{
 				"$lookup": bson.M{
-					"from":         "users",         
-					"localField":   "collaborators", 
-					"foreignField": "_id",           
+					"from":         "users",
+					"localField":   "collaborators",
+					"foreignField": "_id",
 					"as":           "collaborators",
 				},
 			},
