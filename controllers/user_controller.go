@@ -19,13 +19,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	// "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var userCollection *mongo.Collection = configs.GetCollection(configs.DB, "users")
 var todoCollection *mongo.Collection = configs.GetCollection(configs.DB, "todos")
 var validate = validator.New()
-
 
 func CreateUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -441,12 +440,6 @@ func AddCollaboratorToTodo() gin.HandlerFunc {
 		}
 
 		// Check if the collaborator is already in the collaborators array
-		for _, existingCollaborator := range existingTodo.Collaborators {
-			if existingCollaborator == collaboratorObjID {
-				c.JSON(http.StatusConflict, gin.H{"error": "Collaborator is already added to this todo"})
-				return
-			}
-		}
 
 		// Update the todo with the new collaborator
 		update := bson.M{"$push": bson.M{"collaborators": collaboratorObjID}}
@@ -563,32 +556,39 @@ func GetAllTodosForUser() gin.HandlerFunc {
 			return
 		}
 
-		// Query the database for todos associated with the user or where the user is a collaborator
-		findOptions := options.Find()
-		findOptions.SetSort(primitive.D{{Key: "important", Value: -1}, {Key: "createdAt", Value: -1}})
-
-		filter := bson.M{
-			"$or": []bson.M{
-				{"owner": objID},
-				{"collaborators": objID},
+		pipeline := []bson.M{
+			{
+				"$match": bson.M{
+					"$or": []bson.M{
+						{"owner": objID},
+						{"collaborators": objID},
+					},
+				},
+			},
+			{
+				"$lookup": bson.M{
+					"from":         "users",         // Assuming the collaborator details are in the "users" collection
+					"localField":   "collaborators", // Field from the todos collection
+					"foreignField": "_id",           // Field from the users collection
+					"as":           "collaborators",
+				},
+			},
+			{
+				"$sort": bson.M{
+					"important": -1,
+					"createdAt": -1,
+				},
 			},
 		}
 
-		cursor, err := todoCollection.Find(ctx, filter, findOptions)
+		cursor, err := todoCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
-			return
+			// Handle the error
 		}
-		defer cursor.Close(ctx)
 
 		var todos []models.Todo
-		for cursor.Next(ctx) {
-			var todo models.Todo
-			if err := cursor.Decode(&todo); err != nil {
-				c.JSON(http.StatusInternalServerError, responses.UserResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
-				return
-			}
-			todos = append(todos, todo)
+		if err := cursor.All(ctx, &todos); err != nil {
+			// Handle the error
 		}
 
 		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"todos": todos}})
