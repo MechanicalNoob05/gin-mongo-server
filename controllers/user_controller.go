@@ -567,9 +567,9 @@ func GetAllTodosForUser() gin.HandlerFunc {
 			},
 			{
 				"$lookup": bson.M{
-					"from":         "users",         // Assuming the collaborator details are in the "users" collection
-					"localField":   "collaborators", // Field from the todos collection
-					"foreignField": "_id",           // Field from the users collection
+					"from":         "users",         
+					"localField":   "collaborators", 
+					"foreignField": "_id",           
 					"as":           "collaborators",
 				},
 			},
@@ -583,12 +583,14 @@ func GetAllTodosForUser() gin.HandlerFunc {
 
 		cursor, err := todoCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			// Handle the error
+			c.JSON(http.StatusInternalServerError, responses.TodoResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
 		}
 
 		var todos []models.Todo
 		if err := cursor.All(ctx, &todos); err != nil {
-			// Handle the error
+			c.JSON(http.StatusInternalServerError, responses.TodoResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}})
+			return
 		}
 
 		c.JSON(http.StatusOK, responses.UserResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"todos": todos}})
