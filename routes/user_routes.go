@@ -28,6 +28,7 @@ func UserRouter(router *gin.Engine) {
 		sudoUserGroup.DELETE("/deleteAccount", controllers.DeleteAUser())
 		sudoUserGroup.POST("/addProfilePic", controllers.AddProfilePic())
 		sudoUserGroup.POST("/addcollaborator", controllers.AddCollaboratorToTodo())
+		sudoUserGroup.GET("/search/:query", controllers.IncrementalSearchUsers())
 	}
 
 }

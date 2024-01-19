@@ -713,3 +713,40 @@ func AddProfilePic() gin.HandlerFunc {
 		})
 	}
 }
+
+func IncrementalSearchUsers() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Get the search query from the request
+		query := c.Param("query")
+		if query == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Search query is required"})
+			return
+		}
+
+		// Perform a case-insensitive regex search on user names
+		filter := bson.M{"username": bson.M{"$regex": primitive.Regex{Pattern: query, Options: "i"}}}
+
+		// Fetch matching users from the database
+		cursor, err := userCollection.Find(ctx, filter)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform the search"})
+			return
+		}
+		defer cursor.Close(ctx)
+
+		var matchingUsers []models.User
+		for cursor.Next(ctx) {
+			var user models.User
+			if err := cursor.Decode(&user); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode user data"})
+				return
+			}
+			matchingUsers = append(matchingUsers, user)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"users": matchingUsers})
+	}
+}
