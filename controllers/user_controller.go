@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -562,6 +563,19 @@ func GetAllTodosForUser() gin.HandlerFunc {
 			return
 		}
 
+		// Parse query parameters for pagination
+		page, _ := strconv.Atoi(c.Query("page"))
+		pageSize, _ := strconv.Atoi(c.Query("pageSize"))
+		if page <= 0 {
+			page = 1
+		}
+		if pageSize <= 0 {
+			pageSize = 10 // Default page size
+		}
+
+		// Calculate skip value based on page and pageSize
+		skip := (page - 1) * pageSize
+
 		pipeline := []bson.M{
 			{
 				"$match": bson.M{
@@ -584,6 +598,12 @@ func GetAllTodosForUser() gin.HandlerFunc {
 					"important": -1,
 					"createdAt": -1,
 				},
+			},
+			{
+				"$skip": skip,
+			},
+			{
+				"$limit": pageSize,
 			},
 		}
 
@@ -711,5 +731,42 @@ func AddProfilePic() gin.HandlerFunc {
 			"message": "File uploaded successfully to Firebase storage",
 			"url":     newURL,
 		})
+	}
+}
+
+func IncrementalSearchUsers() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Get the search query from the request
+		query := c.Param("query")
+		if query == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Search query is required"})
+			return
+		}
+
+		// Perform a case-insensitive regex search on user names
+		filter := bson.M{"username": bson.M{"$regex": primitive.Regex{Pattern: query, Options: "i"}}}
+
+		// Fetch matching users from the database
+		cursor, err := userCollection.Find(ctx, filter)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform the search"})
+			return
+		}
+		defer cursor.Close(ctx)
+
+		var matchingUsers []models.User
+		for cursor.Next(ctx) {
+			var user models.User
+			if err := cursor.Decode(&user); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode user data"})
+				return
+			}
+			matchingUsers = append(matchingUsers, user)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"users": matchingUsers})
 	}
 }
