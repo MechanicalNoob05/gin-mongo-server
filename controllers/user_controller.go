@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -562,6 +563,19 @@ func GetAllTodosForUser() gin.HandlerFunc {
 			return
 		}
 
+		// Parse query parameters for pagination
+		page, _ := strconv.Atoi(c.Query("page"))
+		pageSize, _ := strconv.Atoi(c.Query("pageSize"))
+		if page <= 0 {
+			page = 1
+		}
+		if pageSize <= 0 {
+			pageSize = 10 // Default page size
+		}
+
+		// Calculate skip value based on page and pageSize
+		skip := (page - 1) * pageSize
+
 		pipeline := []bson.M{
 			{
 				"$match": bson.M{
@@ -584,6 +598,12 @@ func GetAllTodosForUser() gin.HandlerFunc {
 					"important": -1,
 					"createdAt": -1,
 				},
+			},
+			{
+				"$skip": skip,
+			},
+			{
+				"$limit": pageSize,
 			},
 		}
 
